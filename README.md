@@ -2,45 +2,8 @@
 Discrete choice models are used to explain or predict a choice from a set of two or more discrete (i.e. distinct and separable; mutually exclusive) alternatives. 
 The flu, a contagious respiratory disease with potentially severe consequences, underscores the importance of flu vaccination, as studied through factors influencing individuals' participation in vaccination programs.
 
+The flu is a contagious respiratory infectious disease. According to the World Health Organization and the OECD, 'the flu causes illnesses of varying severity, sometimes leading to hospitalization and death.' Indeed, most flu patients can recover quickly, but elderly individuals (aged 65 and older) and those with chronic illnesses are more vulnerable and at risk of complications. According to official WHO figures, the flu is responsible for up to 650,000 deaths each year.
 
-Modèle logit emboîté
+Vaccination against the flu thus becomes a crucial element of public health and represents a significant global health issue; it helps reduce the spread of the disease and protects the population from its harmful effects. Understanding individuals' intentions to get vaccinated is particularly important for professionals, researchers, and health officials.
 
-****1.Estimation du modèle via la commande Nlogit***
-
-*Construire l'arbre de décision
-nlogitgen vaccination = optionn(no: 1, yes: 2 | 3)
-nlogittree optionn vaccination, choice(choice)
-
-predict proba_NL // proba finale de choisir l'alternative i 
-predict p* // calculer la probabilité de choix marginale
-predict condp, condp hlevel(2) //calculer la probabilité de choix conditionnelle
-drop proba_NL
-gen proba_NL = p1*condp // p1 = marginale * condp (conditionnelle)
-
-bys choice:sum proba_NL
-predict proba_NL
-
-
-*************Modèle logit mixte***************
-
-
-* 1. Spécifier le modèle avec aucun effet aléatoire (aide: il faut utiliser la commande asclogit)
-mixlogit choice source message incentive access, group(groupid) id(id) // il faut spécifier rand() pour que la commande fonctionne
-
-* Construire la variable 'alternatives'. Aide: il y a une alternative par ligne pour chaque observation de choix (gid)
-bys groupid: gen alternative=_n
-
-
-* 2. Spécifier le modèle en incluant 3 ASC supposées aléatoires (distribution normale)
-  * On crée 2 indicatrices et on met l'alternative 1(opt-out) en référence.
-
-gen asc2 = alternative==2
-gen asc3 = alternative==3
-
-mixlogit choice source message incentive access, group(groupid) id(id) rand(asc2 asc3)
-
-* Commenter les coefficients obtenus:
-hist source
- 
-* 3. Spécifier le modèle avec le source comme effet aléatoire : source suit la loi normale
-mixlogit choice message incentive access, group(groupid) id(id) rand(asc2 asc3 source )
+With this in mind, we aim to study the determining factors of individuals' participation in flu vaccination. To conduct this study, we rely on data collected from 700 residents of Minnesota, divided into three distinct age groups (18-40 years, 41-64 years, and 65 years and older). The data comes from a stated preference survey, using a discrete choice experiment (DCE). This survey provides an overview of participants' willingness to receive a flu vaccine. The interest individuals have shown in vaccination is measured through a three-category variable, reflecting participants' stated preferences for a given vaccination scenario. These categories include acceptance of getting vaccinated in Situation A (The vaccine reduces the risk of flu, but does not eliminate it completely. You can receive it during the day, on weekends, but you need to make an appointment at an unusual location), Situation B (The vaccine protects against the flu. You receive a $5 gift card when you get vaccinated, and you can do it at an unusual location by appointment), or refusal to get vaccinated in both proposed situations.
