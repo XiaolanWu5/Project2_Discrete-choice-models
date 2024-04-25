@@ -1,0 +1,166 @@
+*****Projet MCD*****
+
+* Sujet : Choix de vaccination
+
+*Auteur : WU Xiaolan (Eco appliquée)
+
+*Date: 17/11/2023
+
+*** 1. Chargement de la base ***  
+
+clear*
+
+global wrk/Users/吴晓岚/Desktop/master2/économértie avancée/G1. Choices Flu vaccination 1/Flu Vacc sample 1/Flu Vacc sample 1
+use "${wrk}/Vacc1.dta",clear
+
+
+/*Description de la base de données: Y dont la possibilité à étudier=choice (choice_option), 
+                                    -7 Facteurs individuels:sexe, éducation, fréquence de vaccaination précédente pendant 10 ans, âge, race, attitude vaccinal pour l'efficacité et attitude vaccinal pour la sécurité
+									-4 Attributs: source,message,incentive,access
+*/
+
+*** 2.Statistiques descriptives *** 
+sum
+tab choice
+sort groupid option
+
+list id option choice in 1/240, sepby(id) 
+
+* Fréquence de sélection de chaque alternative
+gen optionn = .
+
+replace optionn = 1 if option==0
+replace optionn = 2 if option==1
+replace optionn = 3 if option==2
+
+gen choice_option=choice*optionn
+label define optionn 1 "opt out" 2 "situation A" 3 "situation B" 
+label values choice_option optionn 
+
+tab choice_option if choice_option>0 
+hist choice_option if choice_option>0 
+* Variables individuelles
+sum frequency_d effective_d safe_d education_d age_cat sex_d race_ethn_d if choice==1  // 700 individus et chacun a fait 8 choix (N.observations de choix: 700*8=5600)
+
+
+ *** 3. Estimation du modèle via la commande asclogit ***  
+* Effet (poids) des attributs (variables spécifiques aux alternatives)sur la probabilité de choix 
+asclogit choice source message incentive access, case(groupid) alternatives(option) 
+
+
+**La vraisemblance du modèle est de -5340.782. 
+
+* Plus effet des variables individuelles sur la probabilité de choix 
+asclogit choice source message incentive access, case(groupid) alternatives(option) casevars(frequency_d effective_d safe_d education_d age_cat sex_d race_ethn_d)
+*Conséquence: La vraisemblance du modèle est de -4345.4392. Elle augmente par rapport à la vraisemblance du modèle sans variables individuelles, donc ce modèle explique mieux le choix de vaccination. 
+ 
+ *** 4. Post-estimation ***
+ 
+ * 4.1. Comparaison choix réel vs. choix prédit
+estat alternatives // statistiques descriptives sur les alternatives
+predict proba_MNL
+bys option: sum proba_MNL  // bysort
+*Conséquence: on a la plus grande probabilité(43%) de choisir la vaccination dans la situation A.
+
+
+
+
+*************Modèle logit emboîté***************
+
+****1.Estimation du modèle via la commande Nlogit***
+
+*Construire l'arbre de décision
+nlogitgen vaccination = optionn(no: 1, yes: 2 | 3)
+nlogittree optionn vaccination, choice(choice)
+
+
+*Commentaire : dans le modèle Nlogit, on regroupe les choix en 2 grande catégorie : vaccination et non-vaccination. Au sein de la catégorie "vaccination", il y a deux branches pour la situation A et la situation B.
+
+*Spécifier le modèle avec une équation par l'étape du choix
+
+nlogit choice source message incentive access || vaccination : frequency_d effective_d safe_d education_d age_cat sex_d race_ethn_d, base(no) || optionn:,noconst case(groupid)
+*Log likelihood = -4381.8009, presque aussi grande que la vraisamblance de MNL. Pas d'amélioration. 
+
+
+* NB: Dissimilary parameters (Stata) : tau -> représente le degré de corrélation des paramètres au sein d'une même branche (1-lambda(k)) du cours
+
+** A partir de la commande predict iv, interprétez les résultats 
+predict iv
+sum iv
+ttest iv==0
+ttest iv==1
+ 
+ *** 4. Post-estimation ***
+
+ * 4.1. Comparaison choix réel vs. choix prédit
+ 
+predict proba_NL // proba finale de choisir l'alternative i 
+predict p* // calculer la probabilité de choix marginale
+predict condp, condp hlevel(2) //calculer la probabilité de choix conditionnelle
+drop proba_NL
+gen proba_NL = p1*condp // p1 = marginale * condp (conditionnelle)
+
+bys choice:sum proba_NL
+predict proba_NL
+
+** Comparaison choix individuel prédit vs. observées
+sort groupid
+
+*déterminer pour chaque individu la proba max
+bys groupid:egen probamax=max(proba_NL)
+
+*identifier l'alternative avec la proba de choix la plus éluvée : prédiction
+gen predict_NL=probamax==proba_NL
+
+gen concordance = choice == predict_NL
+** Comparaison les choix observés et prédits pour les vaccainations choisie ou pas 
+tab concordance if choice==1
+tab concordance if choice==0
+
+
+
+*************Modèle logit mixte***************
+
+
+* 1. Spécifier le modèle avec aucun effet aléatoire (aide: il faut utiliser la commande asclogit)
+mixlogit choice source message incentive access, group(groupid) id(id) // il faut spécifier rand() pour que la commande fonctionne
+
+* Construire la variable 'alternatives'. Aide: il y a une alternative par ligne pour chaque observation de choix (gid)
+bys groupid: gen alternative=_n
+
+
+* 2. Spécifier le modèle en incluant 3 ASC supposées aléatoires (distribution normale)
+  * On crée 2 indicatrices et on met l'alternative 1(opt-out) en référence.
+
+gen asc2 = alternative==2
+gen asc3 = alternative==3
+
+mixlogit choice source message incentive access, group(groupid) id(id) rand(asc2 asc3)
+
+* Commenter les coefficients obtenus:
+hist source
+ 
+* 3. Spécifier le modèle avec le source comme effet aléatoire : source suit la loi normale
+mixlogit choice message incentive access, group(groupid) id(id) rand(asc2 asc3 source )
+
+   * Y-t-il une hétérogénéité dans l'effet du prix ? 
+
+* 4. Spécifier le modèle avec tous les attributs aléatoires (et indépendants) sauf le prix comme effet aléatoire
+mixlogit choice source , group(groupid) id(id) rand(message incentive access)
+
+   * Il y-t-il une hétérogénéité dans l'effet des variables supposées aléatoires ?
+
+* 5. Spécifier le modèle avec tous les attributs aléatoires (et corrélés) sauf le prix comme effet aléatoire
+mixlogit choice source , group(groupid) id(id) rand(message incentive access) corr
+
+* Comparer avec les modèles précédents
+* Que signifient l11, l21... ?
+* Quels sont les attributs dont les déterminants inobservés sont corrélés entre eux ?      
+
+  * Rq: pour obtenir la matrice de variance-covariance: W (Omega) = CC'
+mixlcov  
+* Quelle est la valeur de V(contract) ?
+* Quell est la valeur de Cov(contract, local) ?  
+
+* 5. Augmenter le nombre de tirages de Halton à 100 (modèle sans effet aléatoires corrélés)
+mixlogit choice source , group(groupid) id(id) rand(message incentive access) nrep(100)
